@@ -140,7 +140,22 @@
                     memory: "512Mi"
                     cpu: "500m"
 
-- name: Wait for all deployments to be ready
+- name: Wait for LiteLLM deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ ocp4_workload_litemaas_namespace }}"
+    name: litellm
+  register: r_deployment
+  until:
+    - r_deployment.resources | length > 0
+    - r_deployment.resources[0].status.readyReplicas is defined
+    - r_deployment.resources[0].status.readyReplicas == 1
+  retries: 30
+  delay: 10
+
+- name: Wait for frontend/backend deployments (if enabled)
+  when: ocp4_workload_litemaas_deploy_frontend | bool or ocp4_workload_litemaas_deploy_backend | bool
   kubernetes.core.k8s_info:
     api_version: apps/v1
     kind: Deployment
@@ -153,12 +168,14 @@
     - r_deployment.resources[0].status.readyReplicas == 1
   retries: 30
   delay: 10
-  loop:
-    - litemaas-backend
-    - litemaas-frontend
-    - litellm
+  loop: "{{ _litemaas_enabled_deployments }}"
+  vars:
+    _litemaas_enabled_deployments: >-
+      {{ (ocp4_workload_litemaas_deploy_backend | bool) | ternary(['litemaas-backend'], []) +
+         (ocp4_workload_litemaas_deploy_frontend | bool) | ternary(['litemaas-frontend'], []) }}
 
 - name: Get frontend route
+  when: ocp4_workload_litemaas_deploy_frontend | bool
   kubernetes.core.k8s_info:
     api_version: route.openshift.io/v1
     kind: Route
@@ -180,17 +197,18 @@
       - "========================================="
       - "LiteMaaS Deployment Complete!"
       - "========================================="
-      - "Frontend URL: https://{{ r_frontend_route.resources[0].spec.host }}"
-      - "LiteLLM Admin: https://{{ r_litellm_route.resources[0].spec.host }}"
+      - "LiteLLM Admin Portal: https://{{ r_litellm_route.resources[0].spec.host }}"
       - ""
       - "LiteLLM Admin Credentials:"
       - "  Username: {{ _litemaas_litellm_ui_username }}"
       - "  Password: {{ _litemaas_litellm_ui_password }}"
+      - ""
+      - "Access:"
+      - "  1. Login to LiteLLM Admin Portal"
+      - "  2. Add AI models (OpenShift AI, DeepSeek, etc.)"
+      - "  3. Create virtual keys for users"
+      - "  4. Share keys with users for API access"
       - "========================================="
-
-- name: User info - LiteMaaS Frontend URL
-  agnosticd_user_info:
-    msg: "LiteMaaS Frontend: https://{{ r_frontend_route.resources[0].spec.host }}"
 
 - name: User info - LiteLLM Admin Portal URL
   agnosticd_user_info:
@@ -200,14 +218,9 @@
   agnosticd_user_info:
     msg: "LiteLLM Admin Login: {{ _litemaas_litellm_ui_username }} / {{ _litemaas_litellm_ui_password }}"
 
-- name: User info - OpenShift login instructions
+- name: User info - Access instructions
   agnosticd_user_info:
-    msg: "User Portal Login: Use 'Login with OpenShift' with your cluster credentials"
-
-- name: Provision data - Frontend URL
-  agnosticd_user_info:
-    data:
-      litemaas_frontend_url: "https://{{ r_frontend_route.resources[0].spec.host }}"
+    msg: "Login to LiteLLM Admin to add models and create virtual keys for users"
 
 - name: Provision data - LiteLLM Admin URL
   agnosticd_user_info:

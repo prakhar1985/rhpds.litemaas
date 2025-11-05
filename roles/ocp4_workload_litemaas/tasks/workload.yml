@@ -20,21 +20,7 @@
           app: litemaas
           workload: litemaas
 
-- name: Create OpenShift OAuth client
-  when:
-    - ocp4_workload_litemaas_oauth_enabled | bool
-    - ocp4_workload_litemaas_oauth_provider == "openshift"
-  kubernetes.core.k8s:
-    state: present
-    definition:
-      apiVersion: oauth.openshift.io/v1
-      kind: OAuthClient
-      metadata:
-        name: "{{ ocp4_workload_litemaas_oauth_client_id }}"
-      secret: "{{ _litemaas_oauth_client_secret_generated }}"
-      redirectURIs:
-        - "{{ _litemaas_oauth_redirect_uri }}"
-      grantMethod: auto
+# OAuth client creation removed - admin-only access via LiteLLM Admin UI
 
 - name: Deploy PostgreSQL
   block:
@@ -167,6 +153,7 @@
       delay: 10
 
 - name: Deploy LiteMaaS Backend
+  when: ocp4_workload_litemaas_deploy_backend | bool
   block:
     - name: Create backend secret
       kubernetes.core.k8s:
@@ -399,6 +386,7 @@
               insecureEdgeTerminationPolicy: Redirect
 
 - name: Deploy LiteMaaS Frontend
+  when: ocp4_workload_litemaas_deploy_frontend | bool
   block:
     - name: Create frontend deployment
       kubernetes.core.k8s:
