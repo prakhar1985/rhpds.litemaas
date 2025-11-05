@@ -444,7 +444,9 @@
                         name: http
                     env:
                       - name: BACKEND_URL
-                        value: "http://litemaas-backend:3000"
+                        value: "/api"
+                      - name: VITE_API_URL
+                        value: "/api"
                     resources:
                       limits:
                         memory: "{{ ocp4_workload_litemaas_frontend_memory_limit }}"
