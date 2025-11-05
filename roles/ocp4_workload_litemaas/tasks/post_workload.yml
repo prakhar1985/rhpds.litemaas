@@ -1,10 +1,20 @@
 ---
 # Post-deployment validation and info
 
-- name: Create LiteLLM database using oc exec
+- name: Get actual PostgreSQL password from running pod
+  ansible.builtin.shell: |
+    oc exec -n {{ ocp4_workload_litemaas_namespace }} statefulset/postgres -- printenv POSTGRES_PASSWORD
+  register: r_actual_pg_password
+  changed_when: false
+
+- name: Set actual PostgreSQL password as fact
+  ansible.builtin.set_fact:
+    _litemaas_actual_postgres_password: "{{ r_actual_pg_password.stdout | trim }}"
+
+- name: Create LiteLLM database using oc exec with actual password
   ansible.builtin.shell: |
     oc exec -n {{ ocp4_workload_litemaas_namespace }} statefulset/postgres -- bash -c "
-    export PGPASSWORD='{{ ocp4_workload_litemaas_postgres_password }}'
+    export PGPASSWORD='{{ _litemaas_actual_postgres_password }}'
     psql -U litemaas -d postgres -c 'DROP DATABASE IF EXISTS litellm_db;'
     psql -U litemaas -d postgres -c 'CREATE DATABASE litellm_db OWNER litemaas;'
     echo 'LiteLLM database created successfully'
@@ -16,7 +26,7 @@
   ansible.builtin.debug:
     msg: "{{ r_db_creation.stdout_lines }}"
 
-- name: Update litellm-secret with DATABASE_URL
+- name: Update litellm-secret with DATABASE_URL using actual password
   kubernetes.core.k8s:
     state: present
     namespace: "{{ ocp4_workload_litemaas_namespace }}"
@@ -32,7 +42,7 @@
         LITELLM_MASTER_KEY: "{{ ocp4_workload_litemaas_litellm_api_key }}"
         UI_USERNAME: "{{ ocp4_workload_litemaas_litellm_ui_username }}"
         UI_PASSWORD: "{{ ocp4_workload_litemaas_litellm_ui_password }}"
-        DATABASE_URL: "postgresql://litemaas:{{ ocp4_workload_litemaas_postgres_password }}@postgres:5432/litellm_db?sslmode=disable"
+        DATABASE_URL: "postgresql://litemaas:{{ _litemaas_actual_postgres_password }}@postgres:5432/litellm_db?sslmode=disable"
 
 - name: Update LiteLLM deployment with database environment variables
   kubernetes.core.k8s:
