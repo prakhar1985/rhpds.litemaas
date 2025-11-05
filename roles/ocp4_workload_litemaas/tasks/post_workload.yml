@@ -183,49 +183,67 @@
       - "========================================="
 
 - name: AgnosticD user info - LiteMaaS URLs
+  when: agnosticd_user_info is defined
   agnosticd_user_info:
     msg: "LiteMaaS Frontend: https://{{ r_frontend_route.resources[0].spec.host }}"
+  ignore_errors: true
 
 - name: AgnosticD user info - LiteLLM Admin URL
+  when: agnosticd_user_info is defined
   agnosticd_user_info:
     msg: "LiteLLM Admin Portal: https://{{ r_litellm_route.resources[0].spec.host }}"
+  ignore_errors: true
 
 - name: AgnosticD user info - LiteLLM credentials
+  when: agnosticd_user_info is defined
   agnosticd_user_info:
     msg: "LiteLLM Admin Login: {{ _litemaas_litellm_ui_username }} / {{ _litemaas_litellm_ui_password }}"
+  ignore_errors: true
 
 - name: AgnosticD user info - OpenShift login instructions
+  when: agnosticd_user_info is defined
   agnosticd_user_info:
     msg: "User Portal Login: Use 'Login with OpenShift' with your cluster credentials"
+  ignore_errors: true
 
 - name: AgnosticD provision data - Frontend URL
+  when: agnosticd_user_info is defined
   agnosticd_user_info:
     data:
       litemaas_frontend_url: "https://{{ r_frontend_route.resources[0].spec.host }}"
+  ignore_errors: true
 
 - name: AgnosticD provision data - LiteLLM Admin URL
+  when: agnosticd_user_info is defined
   agnosticd_user_info:
     data:
       litellm_admin_url: "https://{{ r_litellm_route.resources[0].spec.host }}"
+  ignore_errors: true
 
 - name: AgnosticD provision data - LiteLLM credentials
+  when: agnosticd_user_info is defined
   agnosticd_user_info:
     data:
       litellm_admin_username: "{{ _litemaas_litellm_ui_username }}"
       litellm_admin_password: "{{ _litemaas_litellm_ui_password }}"
+  ignore_errors: true
 
 - name: AgnosticD provision data - Admin API key
+  when: agnosticd_user_info is defined
   agnosticd_user_info:
     data:
       litemaas_admin_api_key: "{{ ocp4_workload_litemaas_admin_api_key }}"
+  ignore_errors: true
 
 - name: AgnosticD provision data - Deployment details
+  when: agnosticd_user_info is defined
   agnosticd_user_info:
     data:
       litemaas_namespace: "{{ ocp4_workload_litemaas_namespace }}"
       litemaas_version: "{{ ocp4_workload_litemaas_version }}"
       cloud_provider: "{{ ocp4_workload_litemaas_cloud_provider }}"
       storage_class: "{{ ocp4_workload_litemaas_postgres_storage_class }}"
+  ignore_errors: true
 
 - name: Save deployment info to file
   ansible.builtin.copy:
