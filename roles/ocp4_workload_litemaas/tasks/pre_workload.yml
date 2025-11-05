@@ -17,12 +17,6 @@
     fail_msg: "Required variables are not set or namespace is not 'rhpds'"
     quiet: true
 
-- name: Verify OpenShift CLI is available
-  ansible.builtin.command: oc version --client
-  register: r_oc_version
-  changed_when: false
-  failed_when: r_oc_version.rc != 0
-
 - name: Check cluster connectivity
   kubernetes.core.k8s_info:
     api_version: v1
@@ -128,14 +122,16 @@
 # OAuth Configuration
 - name: Get OAuth issuer URL from cluster
   block:
-    - name: Get cluster API server URL
-      ansible.builtin.command: oc whoami --show-server
-      register: r_api_server
-      changed_when: false
+    - name: Get Infrastructure resource for API server URL
+      kubernetes.core.k8s_info:
+        api_version: config.openshift.io/v1
+        kind: Infrastructure
+        name: cluster
+      register: r_infrastructure_api
 
     - name: Set OAuth issuer URL (use external API server)
       ansible.builtin.set_fact:
-        _litemaas_oauth_issuer: "{{ r_api_server.stdout }}"
+        _litemaas_oauth_issuer: "{{ r_infrastructure_api.resources[0].status.apiServerURL }}"
 
 - name: Generate OAuth redirect URI for RHPDS namespace
   when: ocp4_workload_litemaas_oauth_enabled | bool
