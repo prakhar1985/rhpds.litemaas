@@ -48,6 +48,14 @@
     _litemaas_litellm_ui_username: "{{ ocp4_workload_litemaas_litellm_ui_username }}"
     _litemaas_litellm_ui_password: "{{ ocp4_workload_litemaas_litellm_ui_password }}"
 
+- name: Debug - Show LiteLLM credentials being used
+  ansible.builtin.debug:
+    msg:
+      - "LiteLLM credentials that will be set:"
+      - "  Username: {{ _litemaas_litellm_ui_username }}"
+      - "  Password: {{ _litemaas_litellm_ui_password }}"
+      - "  Source: {{ 'Reused from existing secret' if r_existing_litellm_secret.resources | length > 0 else 'Newly generated' }}"
+
 - name: Update litellm-secret with DATABASE_URL using actual password
   kubernetes.core.k8s:
     state: present
