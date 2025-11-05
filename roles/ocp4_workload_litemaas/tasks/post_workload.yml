@@ -1,0 +1,76 @@
+---
+# Post-deployment validation and info
+
+- name: Wait for all deployments to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ ocp4_workload_litemaas_namespace }}"
+    name: "{{ item }}"
+  register: r_deployment
+  until:
+    - r_deployment.resources | length > 0
+    - r_deployment.resources[0].status.readyReplicas is defined
+    - r_deployment.resources[0].status.readyReplicas == 1
+  retries: 30
+  delay: 10
+  loop:
+    - litemaas-backend
+    - litemaas-frontend
+    - litellm
+
+- name: Get frontend route
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ ocp4_workload_litemaas_namespace }}"
+    name: litemaas-frontend
+  register: r_frontend_route
+
+- name: Get LiteLLM route
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ ocp4_workload_litemaas_namespace }}"
+    name: litellm
+  register: r_litellm_route
+
+- name: Display access information
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "LiteMaaS Deployment Complete!"
+      - "========================================="
+      - "Frontend URL: https://{{ r_frontend_route.resources[0].spec.host }}"
+      - "LiteLLM Admin: https://{{ r_litellm_route.resources[0].spec.host }}"
+      - ""
+      - "LiteLLM Admin Credentials:"
+      - "  Username: {{ ocp4_workload_litemaas_litellm_ui_username }}"
+      - "  Password: {{ ocp4_workload_litemaas_litellm_ui_password }}"
+      - "========================================="
+
+- name: Save deployment info to file
+  ansible.builtin.copy:
+    content: |
+      LiteMaaS Deployment Information
+      ================================
+
+      Frontend URL: https://{{ r_frontend_route.resources[0].spec.host }}
+      LiteLLM Admin: https://{{ r_litellm_route.resources[0].spec.host }}
+
+      LiteLLM Admin Credentials:
+        Username: {{ ocp4_workload_litemaas_litellm_ui_username }}
+        Password: {{ ocp4_workload_litemaas_litellm_ui_password }}
+
+      Database Password: {{ ocp4_workload_litemaas_postgres_password }}
+      JWT Secret: {{ ocp4_workload_litemaas_jwt_secret }}
+      Admin API Key: {{ ocp4_workload_litemaas_admin_api_key }}
+
+      Deployment Details:
+        Namespace: {{ ocp4_workload_litemaas_namespace }}
+        Cloud Provider: {{ ocp4_workload_litemaas_cloud_provider }}
+        Storage Class: {{ ocp4_workload_litemaas_postgres_storage_class }}
+        Cluster Domain: {{ ocp4_workload_litemaas_cluster_domain }}
+    dest: "{{ ansible_env.HOME }}/litemaas-deployment-info.txt"
+    mode: '0600'
+  when: ansible_env.HOME is defined

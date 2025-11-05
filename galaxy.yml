@@ -1,0 +1,23 @@
+---
+namespace: rhpds
+name: litemaas
+version: 1.0.0
+readme: README.md
+authors:
+  - Prakhar Srivastava <psrivast@redhat.com>
+description: Ansible collection for deploying LiteMaaS on OpenShift - Cloud Agnostic (AWS, Azure, GCP, CNV/ODF)
+license:
+  - MIT
+tags:
+  - openshift
+  - ai
+  - litellm
+  - model_gateway
+  - rhdp
+  - aws
+  - azure
+  - gcp
+repository: https://github.com/prakhar1985/rhpds.litemaas
+documentation: https://github.com/prakhar1985/rhpds.litemaas/blob/main/README.md
+homepage: https://github.com/prakhar1985/rhpds.litemaas
+issues: https://github.com/prakhar1985/rhpds.litemaas/issues

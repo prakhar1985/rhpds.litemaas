@@ -1,0 +1,455 @@
+---
+# Main workload deployment tasks
+
+- name: Display deployment header
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "Deploying LiteMaaS Workload"
+      - "========================================="
+
+- name: Create rhpds namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ ocp4_workload_litemaas_namespace }}"
+        labels:
+          app: litemaas
+          workload: litemaas
+
+- name: Create OAuth client
+  when: ocp4_workload_litemaas_oauth_enabled | bool
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: oauth.openshift.io/v1
+      kind: OAuthClient
+      metadata:
+        name: "{{ ocp4_workload_litemaas_oauth_client_id }}"
+      secret: "{{ ocp4_workload_litemaas_oauth_client_secret }}"
+      redirectURIs:
+        - "{{ _litemaas_oauth_redirect_uri }}"
+      grantMethod: auto
+
+- name: Deploy PostgreSQL
+  block:
+    - name: Create PostgreSQL secret
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: postgres-secret
+            labels:
+              app: postgres
+          type: Opaque
+          stringData:
+            POSTGRES_PASSWORD: "{{ ocp4_workload_litemaas_postgres_password }}"
+            DATABASE_URL: "postgresql://litemaas:{{ ocp4_workload_litemaas_postgres_password }}@postgres:5432/litemaas"
+
+    - name: Create PostgreSQL service
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: postgres
+            labels:
+              app: postgres
+          spec:
+            ports:
+              - port: 5432
+                targetPort: 5432
+                name: postgres
+            selector:
+              app: postgres
+
+    - name: Create PostgreSQL StatefulSet
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: postgres
+            labels:
+              app: postgres
+          spec:
+            serviceName: postgres
+            replicas: 1
+            selector:
+              matchLabels:
+                app: postgres
+            template:
+              metadata:
+                labels:
+                  app: postgres
+              spec:
+                containers:
+                  - name: postgres
+                    image: "postgres:{{ ocp4_workload_litemaas_postgres_version }}"
+                    ports:
+                      - containerPort: 5432
+                        name: postgres
+                    env:
+                      - name: POSTGRES_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: postgres-secret
+                            key: POSTGRES_PASSWORD
+                      - name: POSTGRES_USER
+                        value: "litemaas"
+                      - name: POSTGRES_DB
+                        value: "litemaas"
+                      - name: PGDATA
+                        value: "/var/lib/postgresql/data/pgdata"
+                    volumeMounts:
+                      - name: postgres-storage
+                        mountPath: /var/lib/postgresql/data
+                    resources:
+                      limits:
+                        memory: "1Gi"
+                        cpu: "1000m"
+                      requests:
+                        memory: "512Mi"
+                        cpu: "500m"
+                    livenessProbe:
+                      exec:
+                        command:
+                          - /bin/sh
+                          - -c
+                          - pg_isready -U litemaas
+                      initialDelaySeconds: 30
+                      periodSeconds: 10
+                    readinessProbe:
+                      exec:
+                        command:
+                          - /bin/sh
+                          - -c
+                          - pg_isready -U litemaas
+                      initialDelaySeconds: 10
+                      periodSeconds: 5
+            volumeClaimTemplates:
+              - metadata:
+                  name: postgres-storage
+                  labels:
+                    app: postgres
+                spec:
+                  accessModes:
+                    - "{{ ocp4_workload_litemaas_postgres_storage_access_mode }}"
+                  storageClassName: "{{ ocp4_workload_litemaas_postgres_storage_class }}"
+                  resources:
+                    requests:
+                      storage: "{{ ocp4_workload_litemaas_postgres_storage_size }}"
+
+    - name: Wait for PostgreSQL to be ready
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        label_selectors:
+          - app=postgres
+      register: r_postgres_pods
+      until:
+        - r_postgres_pods.resources | length > 0
+        - r_postgres_pods.resources[0].status.phase == "Running"
+      retries: 30
+      delay: 10
+
+- name: Deploy LiteMaaS Backend
+  block:
+    - name: Create backend secret
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: backend-secret
+            labels:
+              app: litemaas-backend
+          type: Opaque
+          stringData:
+            JWT_SECRET: "{{ ocp4_workload_litemaas_jwt_secret }}"
+            ADMIN_API_KEY: "{{ ocp4_workload_litemaas_admin_api_key }}"
+            OAUTH_CLIENT_SECRET: "{{ ocp4_workload_litemaas_oauth_client_secret }}"
+
+    - name: Create backend deployment
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: litemaas-backend
+            labels:
+              app: litemaas-backend
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: litemaas-backend
+            template:
+              metadata:
+                labels:
+                  app: litemaas-backend
+              spec:
+                containers:
+                  - name: backend
+                    image: "{{ ocp4_workload_litemaas_image_registry }}/litemaas-backend:{{ ocp4_workload_litemaas_version }}"
+                    ports:
+                      - containerPort: 3000
+                        name: http
+                    env:
+                      - name: DATABASE_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: postgres-secret
+                            key: DATABASE_URL
+                      - name: JWT_SECRET
+                        valueFrom:
+                          secretKeyRef:
+                            name: backend-secret
+                            key: JWT_SECRET
+                      - name: ADMIN_API_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: backend-secret
+                            key: ADMIN_API_KEY
+                      - name: OAUTH_CLIENT_ID
+                        value: "{{ ocp4_workload_litemaas_oauth_client_id }}"
+                      - name: OAUTH_CLIENT_SECRET
+                        valueFrom:
+                          secretKeyRef:
+                            name: backend-secret
+                            key: OAUTH_CLIENT_SECRET
+                      - name: LITELLM_API_BASE
+                        value: "http://litellm:4000"
+                    resources:
+                      limits:
+                        memory: "{{ ocp4_workload_litemaas_backend_memory_limit }}"
+                        cpu: "{{ ocp4_workload_litemaas_backend_cpu_limit }}"
+                      requests:
+                        memory: "256Mi"
+                        cpu: "250m"
+
+    - name: Create backend service
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: litemaas-backend
+            labels:
+              app: litemaas-backend
+          spec:
+            ports:
+              - port: 3000
+                targetPort: 3000
+                name: http
+            selector:
+              app: litemaas-backend
+
+- name: Deploy LiteLLM Gateway
+  block:
+    - name: Create LiteLLM secret
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: litellm-secret
+            labels:
+              app: litellm
+          type: Opaque
+          stringData:
+            LITELLM_MASTER_KEY: "{{ ocp4_workload_litemaas_litellm_api_key }}"
+            UI_USERNAME: "{{ ocp4_workload_litemaas_litellm_ui_username }}"
+            UI_PASSWORD: "{{ ocp4_workload_litemaas_litellm_ui_password }}"
+
+    - name: Create LiteLLM deployment
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: litellm
+            labels:
+              app: litellm
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: litellm
+            template:
+              metadata:
+                labels:
+                  app: litellm
+              spec:
+                containers:
+                  - name: litellm
+                    image: "{{ ocp4_workload_litemaas_image_registry }}/litellm:{{ ocp4_workload_litemaas_version }}"
+                    ports:
+                      - containerPort: 4000
+                        name: http
+                    env:
+                      - name: LITELLM_MASTER_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: litellm-secret
+                            key: LITELLM_MASTER_KEY
+                      - name: UI_USERNAME
+                        valueFrom:
+                          secretKeyRef:
+                            name: litellm-secret
+                            key: UI_USERNAME
+                      - name: UI_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: litellm-secret
+                            key: UI_PASSWORD
+                    resources:
+                      limits:
+                        memory: "{{ ocp4_workload_litemaas_litellm_memory_limit }}"
+                        cpu: "{{ ocp4_workload_litemaas_litellm_cpu_limit }}"
+                      requests:
+                        memory: "512Mi"
+                        cpu: "500m"
+
+    - name: Create LiteLLM service
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: litellm
+            labels:
+              app: litellm
+          spec:
+            ports:
+              - port: 4000
+                targetPort: 4000
+                name: http
+            selector:
+              app: litellm
+
+    - name: Create LiteLLM route
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: litellm
+            labels:
+              app: litellm
+          spec:
+            host: "litellm-rhpds.{{ ocp4_workload_litemaas_cluster_domain }}"
+            to:
+              kind: Service
+              name: litellm
+            port:
+              targetPort: http
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
+
+- name: Deploy LiteMaaS Frontend
+  block:
+    - name: Create frontend deployment
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: litemaas-frontend
+            labels:
+              app: litemaas-frontend
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: litemaas-frontend
+            template:
+              metadata:
+                labels:
+                  app: litemaas-frontend
+              spec:
+                containers:
+                  - name: frontend
+                    image: "{{ ocp4_workload_litemaas_image_registry }}/litemaas-frontend:{{ ocp4_workload_litemaas_version }}"
+                    ports:
+                      - containerPort: 8080
+                        name: http
+                    env:
+                      - name: BACKEND_URL
+                        value: "http://litemaas-backend:3000"
+                    resources:
+                      limits:
+                        memory: "{{ ocp4_workload_litemaas_frontend_memory_limit }}"
+                        cpu: "{{ ocp4_workload_litemaas_frontend_cpu_limit }}"
+                      requests:
+                        memory: "128Mi"
+                        cpu: "100m"
+
+    - name: Create frontend service
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: litemaas-frontend
+            labels:
+              app: litemaas-frontend
+          spec:
+            ports:
+              - port: 8080
+                targetPort: 8080
+                name: http
+            selector:
+              app: litemaas-frontend
+
+    - name: Create frontend route
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: litemaas-frontend
+            labels:
+              app: litemaas-frontend
+          spec:
+            host: "litemaas-rhpds.{{ ocp4_workload_litemaas_cluster_domain }}"
+            to:
+              kind: Service
+              name: litemaas-frontend
+            port:
+              targetPort: http
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect

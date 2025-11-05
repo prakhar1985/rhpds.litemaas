@@ -1,0 +1,145 @@
+---
+# Pre-flight checks and setup - Cloud Agnostic
+
+- name: Display pre-flight header
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "LiteMaaS Pre-flight Checks"
+      - "========================================="
+
+- name: Ensure required variables are set
+  ansible.builtin.assert:
+    that:
+      - ocp4_workload_litemaas_namespace is defined
+      - ocp4_workload_litemaas_version is defined
+      - ocp4_workload_litemaas_namespace == "rhpds"
+    fail_msg: "Required variables are not set or namespace is not 'rhpds'"
+    quiet: true
+
+- name: Verify OpenShift CLI is available
+  ansible.builtin.command: oc version --client
+  register: r_oc_version
+  changed_when: false
+  failed_when: r_oc_version.rc != 0
+
+- name: Check cluster connectivity
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: default
+  register: r_cluster_check
+  failed_when: r_cluster_check.failed
+
+# Cloud Provider Detection
+- name: Detect cloud provider if not specified
+  when: ocp4_workload_litemaas_cloud_provider == ""
+  block:
+    - name: Get infrastructure information
+      kubernetes.core.k8s_info:
+        api_version: config.openshift.io/v1
+        kind: Infrastructure
+        name: cluster
+      register: r_infrastructure
+
+    - name: Set cloud provider from infrastructure
+      ansible.builtin.set_fact:
+        ocp4_workload_litemaas_cloud_provider: "{{ r_infrastructure.resources[0].status.platformStatus.type | lower }}"
+
+    - name: Map platform types to cloud providers
+      ansible.builtin.set_fact:
+        ocp4_workload_litemaas_cloud_provider: >-
+          {%- if ocp4_workload_litemaas_cloud_provider in ['aws', 'amazon'] -%}aws
+          {%- elif ocp4_workload_litemaas_cloud_provider in ['azure', 'azurestack'] -%}azure
+          {%- elif ocp4_workload_litemaas_cloud_provider in ['gcp', 'gce'] -%}gcp
+          {%- elif ocp4_workload_litemaas_cloud_provider in ['vsphere', 'vmware'] -%}vsphere
+          {%- elif ocp4_workload_litemaas_cloud_provider in ['openstack'] -%}openstack
+          {%- elif ocp4_workload_litemaas_cloud_provider in ['baremetal', 'none'] -%}baremetal
+          {%- else -%}{{ ocp4_workload_litemaas_cloud_provider }}
+          {%- endif -%}
+
+- name: Display detected cloud provider
+  ansible.builtin.debug:
+    msg: "Detected cloud provider: {{ ocp4_workload_litemaas_cloud_provider }}"
+
+# Storage Class Auto-Detection
+- name: Configure storage class based on cloud provider
+  when: ocp4_workload_litemaas_postgres_storage_class == ""
+  block:
+    - name: Get all storage classes
+      kubernetes.core.k8s_info:
+        api_version: storage.k8s.io/v1
+        kind: StorageClass
+      register: r_storage_classes
+
+    - name: Try cloud-specific storage class first
+      ansible.builtin.set_fact:
+        _litemaas_preferred_storage_class: "{{ _ocp4_workload_litemaas_storage_class_map[ocp4_workload_litemaas_cloud_provider] | default('') }}"
+
+    - name: Check if preferred storage class exists
+      ansible.builtin.set_fact:
+        _litemaas_storage_class_exists: "{{ r_storage_classes.resources | selectattr('metadata.name', 'equalto', _litemaas_preferred_storage_class) | list | length > 0 }}"
+      when: _litemaas_preferred_storage_class != ""
+
+    - name: Use preferred storage class if available
+      ansible.builtin.set_fact:
+        ocp4_workload_litemaas_postgres_storage_class: "{{ _litemaas_preferred_storage_class }}"
+      when:
+        - _litemaas_preferred_storage_class != ""
+        - _litemaas_storage_class_exists | default(false)
+
+    - name: Fall back to default storage class
+      when: ocp4_workload_litemaas_postgres_storage_class == ""
+      block:
+        - name: Find default storage class
+          ansible.builtin.set_fact:
+            ocp4_workload_litemaas_postgres_storage_class: >-
+              {{ r_storage_classes.resources
+                 | selectattr('metadata.annotations.storageclass.kubernetes.io/is-default-class', 'defined')
+                 | selectattr('metadata.annotations.storageclass.kubernetes.io/is-default-class', 'equalto', 'true')
+                 | map(attribute='metadata.name')
+                 | first | default('gp3-csi') }}
+
+- name: Display storage configuration
+  ansible.builtin.debug:
+    msg:
+      - "Storage Class: {{ ocp4_workload_litemaas_postgres_storage_class }}"
+      - "Storage Size: {{ ocp4_workload_litemaas_postgres_storage_size }}"
+
+# Cluster Domain Detection
+- name: Auto-detect cluster domain if not provided
+  when: ocp4_workload_litemaas_cluster_domain == ""
+  block:
+    - name: Get ingress configuration
+      kubernetes.core.k8s_info:
+        api_version: config.openshift.io/v1
+        kind: Ingress
+        name: cluster
+      register: r_ingress_config
+
+    - name: Set cluster domain from ingress config
+      ansible.builtin.set_fact:
+        ocp4_workload_litemaas_cluster_domain: "{{ r_ingress_config.resources[0].spec.domain }}"
+
+- name: Display cluster domain
+  ansible.builtin.debug:
+    msg: "Using cluster domain: {{ ocp4_workload_litemaas_cluster_domain }}"
+
+# OAuth Configuration
+- name: Generate OAuth redirect URI for RHPDS namespace
+  when: ocp4_workload_litemaas_oauth_enabled | bool
+  ansible.builtin.set_fact:
+    _litemaas_oauth_redirect_uri: "https://litemaas-rhpds.{{ ocp4_workload_litemaas_cluster_domain }}/oauth/callback"
+
+- name: Display pre-flight summary
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "Pre-flight Checks Complete"
+      - "========================================="
+      - "Cloud Provider: {{ ocp4_workload_litemaas_cloud_provider }}"
+      - "Namespace: {{ ocp4_workload_litemaas_namespace }}"
+      - "Version: {{ ocp4_workload_litemaas_version }}"
+      - "Storage Class: {{ ocp4_workload_litemaas_postgres_storage_class }}"
+      - "Cluster Domain: {{ ocp4_workload_litemaas_cluster_domain }}"
+      - "========================================="

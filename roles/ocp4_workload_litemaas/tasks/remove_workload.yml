@@ -1,0 +1,36 @@
+---
+# Workload removal tasks
+
+- name: Display removal header
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "Removing LiteMaaS Workload"
+      - "========================================="
+
+- name: Remove OAuth client
+  when: ocp4_workload_litemaas_oauth_enabled | bool
+  kubernetes.core.k8s:
+    state: absent
+    api_version: oauth.openshift.io/v1
+    kind: OAuthClient
+    name: "{{ ocp4_workload_litemaas_oauth_client_id }}"
+
+- name: Remove namespace
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Namespace
+    name: "{{ ocp4_workload_litemaas_namespace }}"
+    wait: true
+    wait_timeout: 300
+
+- name: Confirm removal
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "LiteMaaS workload removed successfully"
+      - "========================================="
+      - "Namespace: {{ ocp4_workload_litemaas_namespace }}"
+      - "OAuth Client: {{ ocp4_workload_litemaas_oauth_client_id }}"
+      - "========================================="
