@@ -126,6 +126,19 @@
     msg: "Using cluster domain: {{ ocp4_workload_litemaas_cluster_domain }}"
 
 # OAuth Configuration
+- name: Get OAuth issuer URL from cluster
+  block:
+    - name: Get OAuth server metadata
+      kubernetes.core.k8s_info:
+        api_version: config.openshift.io/v1
+        kind: OAuth
+        name: cluster
+      register: r_oauth_config
+
+    - name: Set OAuth issuer URL
+      ansible.builtin.set_fact:
+        _litemaas_oauth_issuer: "{{ r_oauth_config.resources[0].status.issuer | default('https://kubernetes.default.svc') }}"
+
 - name: Generate OAuth redirect URI for RHPDS namespace
   when: ocp4_workload_litemaas_oauth_enabled | bool
   ansible.builtin.set_fact:
