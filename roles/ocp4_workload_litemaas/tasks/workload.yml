@@ -306,54 +306,6 @@
 
 - name: Deploy LiteLLM Gateway
   block:
-    - name: Create LiteLLM database in PostgreSQL
-      kubernetes.core.k8s:
-        state: present
-        namespace: "{{ ocp4_workload_litemaas_namespace }}"
-        definition:
-          apiVersion: batch/v1
-          kind: Job
-          metadata:
-            name: create-litellm-db
-            labels:
-              app: postgres
-          spec:
-            ttlSecondsAfterFinished: 100
-            template:
-              spec:
-                restartPolicy: Never
-                containers:
-                  - name: create-db
-                    image: "postgres:{{ ocp4_workload_litemaas_postgres_version }}"
-                    env:
-                      - name: PGPASSWORD
-                        valueFrom:
-                          secretKeyRef:
-                            name: postgres-secret
-                            key: POSTGRES_PASSWORD
-                    command:
-                      - /bin/bash
-                      - -c
-                      - |
-                        echo "Creating LiteLLM database..."
-                        psql -h postgres -U litemaas -d postgres -c "DROP DATABASE IF EXISTS litellm_db;"
-                        psql -h postgres -U litemaas -d postgres -c "CREATE DATABASE litellm_db OWNER litemaas;"
-                        echo "LiteLLM database created successfully"
-
-    - name: Wait for LiteLLM database creation job
-      kubernetes.core.k8s_info:
-        api_version: batch/v1
-        kind: Job
-        name: create-litellm-db
-        namespace: "{{ ocp4_workload_litemaas_namespace }}"
-      register: r_litellm_db_job
-      until:
-        - r_litellm_db_job.resources | length > 0
-        - r_litellm_db_job.resources[0].status.succeeded is defined
-        - r_litellm_db_job.resources[0].status.succeeded == 1
-      retries: 10
-      delay: 5
-
     - name: Create LiteLLM secret
       kubernetes.core.k8s:
         state: present
@@ -370,7 +322,6 @@
             LITELLM_MASTER_KEY: "{{ ocp4_workload_litemaas_litellm_api_key }}"
             UI_USERNAME: "{{ ocp4_workload_litemaas_litellm_ui_username }}"
             UI_PASSWORD: "{{ ocp4_workload_litemaas_litellm_ui_password }}"
-            DATABASE_URL: "postgresql://litemaas:{{ ocp4_workload_litemaas_postgres_password }}@postgres:5432/litellm_db?sslmode=disable"
 
     - name: Create LiteLLM deployment
       kubernetes.core.k8s:
@@ -415,15 +366,6 @@
                           secretKeyRef:
                             name: litellm-secret
                             key: UI_PASSWORD
-                      - name: DATABASE_URL
-                        valueFrom:
-                          secretKeyRef:
-                            name: litellm-secret
-                            key: DATABASE_URL
-                      - name: STORE_MODEL_IN_DB
-                        value: "True"
-                      - name: LITELLM_MODE
-                        value: "PRODUCTION"
                     resources:
                       limits:
                         memory: "{{ ocp4_workload_litemaas_litellm_memory_limit }}"
