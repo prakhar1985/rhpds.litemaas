@@ -50,7 +50,7 @@
           type: Opaque
           stringData:
             POSTGRES_PASSWORD: "{{ ocp4_workload_litemaas_postgres_password }}"
-            DATABASE_URL: "postgresql://litemaas:{{ ocp4_workload_litemaas_postgres_password }}@postgres:5432/litemaas"
+            DATABASE_URL: "postgresql://litemaas:{{ ocp4_workload_litemaas_postgres_password }}@postgres:5432/litemaas?sslmode=disable"
 
     - name: Create PostgreSQL service
       kubernetes.core.k8s:
@@ -215,6 +215,8 @@
                         value: "production"
                       - name: PORT
                         value: "3000"
+                      - name: NODE_TLS_REJECT_UNAUTHORIZED
+                        value: "0"
                       - name: DATABASE_URL
                         valueFrom:
                           secretKeyRef:
