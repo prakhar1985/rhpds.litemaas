@@ -198,21 +198,30 @@
       - "LiteMaaS Deployment Complete!"
       - "========================================="
       - "LiteLLM Admin Portal: https://{{ r_litellm_route.resources[0].spec.host }}"
+      - "User API Endpoint: https://{{ r_litellm_route.resources[0].spec.host }}"
       - ""
       - "LiteLLM Admin Credentials:"
       - "  Username: {{ _litemaas_litellm_ui_username }}"
       - "  Password: {{ _litemaas_litellm_ui_password }}"
       - ""
-      - "Access:"
+      - "Admin Workflow:"
       - "  1. Login to LiteLLM Admin Portal"
       - "  2. Add AI models (OpenShift AI, DeepSeek, etc.)"
       - "  3. Create virtual keys for users"
-      - "  4. Share keys with users for API access"
+      - "  4. Share keys and API endpoint with users"
+      - ""
+      - "User Access:"
+      - "  API Endpoint: https://{{ r_litellm_route.resources[0].spec.host }}"
+      - "  Virtual Key: Created by admin"
       - "========================================="
 
 - name: User info - LiteLLM Admin Portal URL
   agnosticd_user_info:
     msg: "LiteLLM Admin Portal: https://{{ r_litellm_route.resources[0].spec.host }}"
+
+- name: User info - User API Endpoint
+  agnosticd_user_info:
+    msg: "User API Endpoint: https://{{ r_litellm_route.resources[0].spec.host }}"
 
 - name: User info - LiteLLM Admin credentials
   agnosticd_user_info:
@@ -220,12 +229,13 @@
 
 - name: User info - Access instructions
   agnosticd_user_info:
-    msg: "Login to LiteLLM Admin to add models and create virtual keys for users"
+    msg: "Admins: Login to add models and create virtual keys. Users: Access via API with virtual keys"
 
-- name: Provision data - LiteLLM Admin URL
+- name: Provision data - LiteLLM URLs
   agnosticd_user_info:
     data:
       litellm_admin_url: "https://{{ r_litellm_route.resources[0].spec.host }}"
+      litellm_api_endpoint: "https://{{ r_litellm_route.resources[0].spec.host }}"
 
 - name: Provision data - LiteLLM credentials
   agnosticd_user_info:
@@ -252,14 +262,22 @@
       LiteMaaS Deployment Information
       ================================
 
-      Frontend URL: https://{{ r_frontend_route.resources[0].spec.host }}
-      LiteLLM Admin: https://{{ r_litellm_route.resources[0].spec.host }}
+      LiteLLM Admin Portal: https://{{ r_litellm_route.resources[0].spec.host }}
+      User API Endpoint: https://{{ r_litellm_route.resources[0].spec.host }}
 
       LiteLLM Admin Credentials:
         Username: {{ _litemaas_litellm_ui_username }}
         Password: {{ _litemaas_litellm_ui_password }}
 
-      Admin API Key: {{ ocp4_workload_litemaas_admin_api_key }}
+      Admin Workflow:
+        1. Login to LiteLLM Admin Portal
+        2. Add AI models (OpenShift AI, DeepSeek, etc.)
+        3. Create virtual keys for users
+        4. Share keys and API endpoint with users
+
+      User Access:
+        API Endpoint: https://{{ r_litellm_route.resources[0].spec.host }}
+        Virtual Key: Created by admin
 
       Deployment Details:
         Namespace: {{ ocp4_workload_litemaas_namespace }}
