@@ -144,7 +144,7 @@
 - name: Generate OAuth redirect URI for RHPDS namespace
   when: ocp4_workload_litemaas_oauth_enabled | bool
   ansible.builtin.set_fact:
-    _litemaas_oauth_redirect_uri: "https://litemaas-rhpds.{{ ocp4_workload_litemaas_cluster_domain }}/oauth/callback"
+    _litemaas_oauth_redirect_uri: "https://litemaas-rhpds.{{ ocp4_workload_litemaas_cluster_domain }}/api/auth/callback"
 
 - name: Display pre-flight summary
   ansible.builtin.debug:

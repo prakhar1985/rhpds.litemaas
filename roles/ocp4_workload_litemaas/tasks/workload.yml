@@ -240,7 +240,7 @@
                       - name: OAUTH_ISSUER
                         value: "{{ _litemaas_oauth_issuer }}"
                       - name: OAUTH_CALLBACK_URL
-                        value: "https://litemaas-rhpds.{{ ocp4_workload_litemaas_cluster_domain }}/oauth/callback"
+                        value: "https://litemaas-rhpds.{{ ocp4_workload_litemaas_cluster_domain }}/api/auth/callback"
                       - name: LITELLM_API_URL
                         value: "http://litellm:4000"
                       - name: LITELLM_API_KEY
@@ -276,6 +276,29 @@
                 name: http
             selector:
               app: litemaas-backend
+
+    - name: Create backend route (for OAuth callback and API)
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ ocp4_workload_litemaas_namespace }}"
+        definition:
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: litemaas-backend
+            labels:
+              app: litemaas-backend
+          spec:
+            host: "litemaas-rhpds.{{ ocp4_workload_litemaas_cluster_domain }}"
+            path: /api
+            to:
+              kind: Service
+              name: litemaas-backend
+            port:
+              targetPort: http
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
 
 - name: Deploy LiteLLM Gateway
   block:
