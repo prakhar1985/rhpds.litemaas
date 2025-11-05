@@ -26,6 +26,28 @@
   ansible.builtin.debug:
     msg: "{{ r_db_creation.stdout_lines }}"
 
+- name: Check if litellm-secret already exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    namespace: "{{ ocp4_workload_litemaas_namespace }}"
+    name: litellm-secret
+  register: r_existing_litellm_secret
+
+- name: Reuse existing LiteLLM credentials if available
+  when: r_existing_litellm_secret.resources | length > 0
+  ansible.builtin.set_fact:
+    _litemaas_litellm_master_key: "{{ r_existing_litellm_secret.resources[0].data.LITELLM_MASTER_KEY | b64decode }}"
+    _litemaas_litellm_ui_username: "{{ r_existing_litellm_secret.resources[0].data.UI_USERNAME | b64decode }}"
+    _litemaas_litellm_ui_password: "{{ r_existing_litellm_secret.resources[0].data.UI_PASSWORD | b64decode }}"
+
+- name: Generate new LiteLLM credentials if needed
+  when: r_existing_litellm_secret.resources | length == 0
+  ansible.builtin.set_fact:
+    _litemaas_litellm_master_key: "{{ ocp4_workload_litemaas_litellm_api_key }}"
+    _litemaas_litellm_ui_username: "{{ ocp4_workload_litemaas_litellm_ui_username }}"
+    _litemaas_litellm_ui_password: "{{ ocp4_workload_litemaas_litellm_ui_password }}"
+
 - name: Update litellm-secret with DATABASE_URL using actual password
   kubernetes.core.k8s:
     state: present
@@ -39,9 +61,9 @@
           app: litellm
       type: Opaque
       stringData:
-        LITELLM_MASTER_KEY: "{{ ocp4_workload_litemaas_litellm_api_key }}"
-        UI_USERNAME: "{{ ocp4_workload_litemaas_litellm_ui_username }}"
-        UI_PASSWORD: "{{ ocp4_workload_litemaas_litellm_ui_password }}"
+        LITELLM_MASTER_KEY: "{{ _litemaas_litellm_master_key }}"
+        UI_USERNAME: "{{ _litemaas_litellm_ui_username }}"
+        UI_PASSWORD: "{{ _litemaas_litellm_ui_password }}"
         DATABASE_URL: "postgresql://litemaas:{{ _litemaas_actual_postgres_password }}@postgres:5432/litellm_db?sslmode=disable"
 
 - name: Update LiteLLM deployment with database environment variables
@@ -138,19 +160,6 @@
     name: litellm
   register: r_litellm_route
 
-- name: Get actual LiteLLM UI password from secret
-  kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Secret
-    namespace: "{{ ocp4_workload_litemaas_namespace }}"
-    name: litellm-secret
-  register: r_litellm_secret
-
-- name: Set actual LiteLLM credentials as facts
-  ansible.builtin.set_fact:
-    _litemaas_actual_litellm_username: "{{ r_litellm_secret.resources[0].data.UI_USERNAME | b64decode }}"
-    _litemaas_actual_litellm_password: "{{ r_litellm_secret.resources[0].data.UI_PASSWORD | b64decode }}"
-
 - name: Display access information
   ansible.builtin.debug:
     msg:
@@ -161,8 +170,8 @@
       - "LiteLLM Admin: https://{{ r_litellm_route.resources[0].spec.host }}"
       - ""
       - "LiteLLM Admin Credentials:"
-      - "  Username: {{ _litemaas_actual_litellm_username }}"
-      - "  Password: {{ _litemaas_actual_litellm_password }}"
+      - "  Username: {{ _litemaas_litellm_ui_username }}"
+      - "  Password: {{ _litemaas_litellm_ui_password }}"
       - "========================================="
 
 - name: Save deployment info to file
@@ -175,8 +184,8 @@
       LiteLLM Admin: https://{{ r_litellm_route.resources[0].spec.host }}
 
       LiteLLM Admin Credentials:
-        Username: {{ _litemaas_actual_litellm_username }}
-        Password: {{ _litemaas_actual_litellm_password }}
+        Username: {{ _litemaas_litellm_ui_username }}
+        Password: {{ _litemaas_litellm_ui_password }}
 
       Database Password: {{ ocp4_workload_litemaas_postgres_password }}
       JWT Secret: {{ ocp4_workload_litemaas_jwt_secret }}
