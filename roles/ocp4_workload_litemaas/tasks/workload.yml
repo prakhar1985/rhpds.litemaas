@@ -206,7 +206,7 @@
               spec:
                 containers:
                   - name: backend
-                    image: "{{ ocp4_workload_litemaas_image_registry }}/litemaas-backend:{{ ocp4_workload_litemaas_version }}"
+                    image: "{{ ocp4_workload_litemaas_backend_image }}:{{ ocp4_workload_litemaas_version }}"
                     ports:
                       - containerPort: 3000
                         name: http
@@ -304,7 +304,7 @@
               spec:
                 containers:
                   - name: litellm
-                    image: "{{ ocp4_workload_litemaas_image_registry }}/litellm:{{ ocp4_workload_litemaas_version }}"
+                    image: "{{ ocp4_workload_litemaas_litellm_image }}:{{ ocp4_workload_litemaas_litellm_tag }}"
                     ports:
                       - containerPort: 4000
                         name: http
@@ -398,7 +398,7 @@
               spec:
                 containers:
                   - name: frontend
-                    image: "{{ ocp4_workload_litemaas_image_registry }}/litemaas-frontend:{{ ocp4_workload_litemaas_version }}"
+                    image: "{{ ocp4_workload_litemaas_frontend_image }}:{{ ocp4_workload_litemaas_version }}"
                     ports:
                       - containerPort: 8080
                         name: http
