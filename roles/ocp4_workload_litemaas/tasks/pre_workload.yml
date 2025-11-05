@@ -141,6 +141,11 @@
         - r_oauth_server.resources[0].status.issuer is defined
         - r_oauth_server.resources[0].status.issuer != ""
 
+- name: Generate OAuth client secret once and reuse
+  when: ocp4_workload_litemaas_oauth_enabled | bool
+  ansible.builtin.set_fact:
+    _litemaas_oauth_client_secret_generated: "{{ ocp4_workload_litemaas_oauth_client_secret }}"
+
 - name: Generate OAuth redirect URI for RHPDS namespace
   when: ocp4_workload_litemaas_oauth_enabled | bool
   ansible.builtin.set_fact:

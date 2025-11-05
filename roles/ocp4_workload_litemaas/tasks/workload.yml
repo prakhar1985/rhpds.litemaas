@@ -29,7 +29,7 @@
       kind: OAuthClient
       metadata:
         name: "{{ ocp4_workload_litemaas_oauth_client_id }}"
-      secret: "{{ ocp4_workload_litemaas_oauth_client_secret }}"
+      secret: "{{ _litemaas_oauth_client_secret_generated }}"
       redirectURIs:
         - "{{ _litemaas_oauth_redirect_uri }}"
       grantMethod: auto
@@ -181,7 +181,7 @@
           stringData:
             JWT_SECRET: "{{ ocp4_workload_litemaas_jwt_secret }}"
             ADMIN_API_KEY: "{{ ocp4_workload_litemaas_admin_api_key }}"
-            OAUTH_CLIENT_SECRET: "{{ ocp4_workload_litemaas_oauth_client_secret }}"
+            OAUTH_CLIENT_SECRET: "{{ _litemaas_oauth_client_secret_generated }}"
 
     - name: Create backend deployment
       kubernetes.core.k8s:
