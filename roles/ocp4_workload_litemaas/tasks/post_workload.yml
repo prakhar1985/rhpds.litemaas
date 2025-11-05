@@ -1,6 +1,99 @@
 ---
 # Post-deployment validation and info
 
+- name: Create LiteLLM database using oc exec
+  ansible.builtin.shell: |
+    oc exec -n {{ ocp4_workload_litemaas_namespace }} statefulset/postgres -- bash -c "
+    export PGPASSWORD='{{ ocp4_workload_litemaas_postgres_password }}'
+    psql -U litemaas -d postgres -c 'DROP DATABASE IF EXISTS litellm_db;'
+    psql -U litemaas -d postgres -c 'CREATE DATABASE litellm_db OWNER litemaas;'
+    echo 'LiteLLM database created successfully'
+    "
+  register: r_db_creation
+  failed_when: false
+
+- name: Display database creation result
+  ansible.builtin.debug:
+    msg: "{{ r_db_creation.stdout_lines }}"
+
+- name: Update litellm-secret with DATABASE_URL
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ ocp4_workload_litemaas_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: litellm-secret
+        labels:
+          app: litellm
+      type: Opaque
+      stringData:
+        LITELLM_MASTER_KEY: "{{ ocp4_workload_litemaas_litellm_api_key }}"
+        UI_USERNAME: "{{ ocp4_workload_litemaas_litellm_ui_username }}"
+        UI_PASSWORD: "{{ ocp4_workload_litemaas_litellm_ui_password }}"
+        DATABASE_URL: "postgresql://litemaas:{{ ocp4_workload_litemaas_postgres_password }}@postgres:5432/litellm_db?sslmode=disable"
+
+- name: Update LiteLLM deployment with database environment variables
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ ocp4_workload_litemaas_namespace }}"
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: litellm
+        labels:
+          app: litellm
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: litellm
+        template:
+          metadata:
+            labels:
+              app: litellm
+          spec:
+            containers:
+              - name: litellm
+                image: "{{ ocp4_workload_litemaas_litellm_image }}:{{ ocp4_workload_litemaas_litellm_tag }}"
+                ports:
+                  - containerPort: 4000
+                    name: http
+                env:
+                  - name: LITELLM_MASTER_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: litellm-secret
+                        key: LITELLM_MASTER_KEY
+                  - name: UI_USERNAME
+                    valueFrom:
+                      secretKeyRef:
+                        name: litellm-secret
+                        key: UI_USERNAME
+                  - name: UI_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: litellm-secret
+                        key: UI_PASSWORD
+                  - name: DATABASE_URL
+                    valueFrom:
+                      secretKeyRef:
+                        name: litellm-secret
+                        key: DATABASE_URL
+                  - name: STORE_MODEL_IN_DB
+                    value: "True"
+                  - name: LITELLM_MODE
+                    value: "PRODUCTION"
+                resources:
+                  limits:
+                    memory: "{{ ocp4_workload_litemaas_litellm_memory_limit }}"
+                    cpu: "{{ ocp4_workload_litemaas_litellm_cpu_limit }}"
+                  requests:
+                    memory: "512Mi"
+                    cpu: "500m"
+
 - name: Wait for all deployments to be ready
   kubernetes.core.k8s_info:
     api_version: apps/v1
