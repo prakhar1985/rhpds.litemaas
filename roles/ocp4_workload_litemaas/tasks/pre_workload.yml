@@ -137,12 +137,19 @@
             name: cluster
           register: r_oauth_server
 
-        - name: Set OAuth issuer URL from cluster OAuth config
+        - name: Get API server URL for OAuth issuer
+          kubernetes.core.k8s_info:
+            api_version: config.openshift.io/v1
+            kind: Infrastructure
+            name: cluster
+          register: r_api_server
+
+        - name: Set OAuth issuer to API server URL (default for OpenShift)
           ansible.builtin.set_fact:
-            _litemaas_oauth_issuer: "https://oauth-openshift.{{ ocp4_workload_litemaas_cluster_domain }}"
+            _litemaas_oauth_issuer: "{{ r_api_server.resources[0].status.apiServerURL }}"
           when: r_oauth_server.resources[0].status.issuer is not defined or r_oauth_server.resources[0].status.issuer == ""
 
-        - name: Use OAuth issuer from cluster if available
+        - name: Use OAuth issuer from cluster if explicitly configured
           ansible.builtin.set_fact:
             _litemaas_oauth_issuer: "{{ r_oauth_server.resources[0].status.issuer }}"
           when:
