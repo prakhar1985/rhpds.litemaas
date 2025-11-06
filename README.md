@@ -372,9 +372,42 @@ cd rhpds.litemaas
 ansible-playbook playbooks/deploy_litemaas.yml
 ```
 
-## Status
+## Changelog
 
-🚧 **Work in Progress** - Currently testing on AWS
+### v0.1.2 (2025-11-05)
+
+**Compatibility:**
+- Aligned with upstream [rh-aiservices-bu/litemaas:0.1.2](https://github.com/rh-aiservices-bu/litemaas/releases/tag/0.1.2)
+
+**Features:**
+- ✅ Admin-only architecture (no OAuth, frontend/backend disabled by default)
+- ✅ LiteLLM virtual key management for user access control
+- ✅ OpenShift AI model integration (Granite 3.2 8B, Mistral 7B)
+- ✅ Platform-specific deployment guides (AWS, CNV/Virtualization)
+- ✅ Automated PostgreSQL 16 + LiteLLM deployment
+- ✅ Auto-detected storage classes (gp3-csi for AWS, ODF for CNV)
+
+**Improvements:**
+- Add init container to wait for PostgreSQL before LiteLLM starts
+- Add health probes (`/health/liveness`, `/health/readiness`)
+- Add `component: ai-proxy` label for better resource organization
+- Update CPU request to 200m (matches upstream)
+- Add model name discovery via `/v1/models` endpoint
+- Add troubleshooting guide for virtual key access
+
+**Documentation:**
+- Platform-specific deployment instructions (AWS vs CNV)
+- CNV virtualenv setup guide (create, activate, install requirements)
+- Model addition workflow with endpoint testing
+- Virtual key creation and testing examples
+- Credential retrieval commands
+
+**Testing:**
+- ✅ Tested on AWS clusters (gp3-csi storage)
+- ✅ Tested on CNV clusters (ODF/Ceph storage)
+- ✅ Tested Granite 3.2 8B model integration
+- ✅ Tested Mistral 7B model integration
+- ✅ Tested virtual key creation and access control
 
 ## Author
 
