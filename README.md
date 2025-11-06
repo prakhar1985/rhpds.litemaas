@@ -225,7 +225,7 @@ curl -X POST \
 3. **Copy the generated key:** `sk-xxxxxx`
 4. **Share with user:**
    ```
-   API Endpoint: https://litellm-admin.apps.cluster-xxx.opentlc.com
+   API Endpoint: https://litellm-rhpds.apps.cluster-xxx.opentlc.com
    Virtual Key: sk-xxxxxx
    Available Models:
      - openai/granite-3-2-8b-instruct
