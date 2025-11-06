@@ -2,6 +2,9 @@
 
 Deploy LiteMaaS (Models as a Service) on OpenShift in 3 minutes.
 
+**Version:** 0.1.2
+**Upstream:** [rh-aiservices-bu/litemaas:0.1.2](https://github.com/rh-aiservices-bu/litemaas/releases/tag/0.1.2)
+
 ## What is LiteMaaS?
 
 LiteMaaS provides an admin-managed AI model serving platform with:
